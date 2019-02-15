@@ -36,6 +36,8 @@ class Thread(ThreadABC):
         self._channel = channel
         self._ready_event = asyncio.Event()
         self._close_task = None
+        self._typing_message = None
+        self._del_typing_message_task = None
 
     def __repr__(self):
         return (f'Thread(recipient="{self.recipient or self.id}", '
@@ -75,6 +77,21 @@ class Thread(ThreadABC):
             self._ready_event.set()
         else:
             self._ready_event.clear()
+    
+    async def _delete_typing_message(self, after=10):
+        await asyncio.sleep(after)
+        await self._typing_message.delete()
+        self._typing_message = None
+        self._del_typing_message_task = None
+
+    async def trigger_typing(self):
+        if not self._typing_message:
+            typing_emoji = discord.utils.get(self.bot.emojis, name='typing') or ''
+            message = f'{typing_emoji} **{self.recipient.name}** is typing...'
+            self._typing_message = await self.channel.send(message)
+        if self._del_typing_message_task:
+            self._del_typing_message_task.cancel()
+        self._del_typing_message_task = self.bot.loop.create_task(self._delete_typing_message())
 
     async def setup(self, *, creator=None, category=None):
         """Create the thread channel and other io related initialisation tasks"""
@@ -377,6 +394,9 @@ class Thread(ThreadABC):
             self.bot.loop.create_task(
                 self.bot.api.append_log(message, self.channel.id)
             )
+        
+        if not from_mod and self._typing_message is not None:
+            self.bot.loop.create_task(self._delete_typing_message(0))
 
         destination = destination or self.channel
 

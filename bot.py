@@ -579,6 +579,14 @@ class ModmailBot(Bot):
             )
             self.dispatch('command_error', ctx, exc)
 
+    async def on_typing(self, channel, user, when):
+        if not isinstance(channel, discord.DMChannel):
+            return
+        
+        thread = await self.threads.find(recipient=user)
+        if thread:
+            await thread.trigger_typing()
+
     async def on_guild_channel_delete(self, channel):
         if channel.guild != self.modmail_guild:
             return
